@@ -83,32 +83,51 @@
   let currentUser = null;
   let records = [];
 
-  // Helper: формат только времени
+  // Загрузка/сохранение из localStorage
+  function loadRecords() {
+    const data = localStorage.getItem('records');
+    records = data ? JSON.parse(data).map(r => ({
+      user: r.user,
+      number: r.number,
+      start: new Date(r.start),
+      end: r.end ? new Date(r.end) : null
+    })) : [];
+  }
+  function saveRecords() {
+    const toStore = records.map(r => ({
+      user: r.user,
+      number: r.number,
+      start: r.start.toISOString(),
+      end: r.end ? r.end.toISOString() : null
+    }));
+    localStorage.setItem('records', JSON.stringify(toStore));
+  }
+
+  // Формат только времени
   function formatTimeOnly(date) {
     if (!date) return '';
     const d = new Date(date);
-    return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+    return d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
   }
-  // Полный формат даты+времени
+  // Полный формат
   function formatDateTime(date) {
     if (!date) return '';
     const d = new Date(date);
-    const year = d.getFullYear(), month = ('0'+(d.getMonth()+1)).slice(-2), day = ('0'+d.getDate()).slice(-2);
-    const hours = ('0'+d.getHours()).slice(-2), minutes = ('0'+d.getMinutes()).slice(-2);
-    return `${day}.${month}.${year} ${hours}:${minutes}`;
+    const year=d.getFullYear(), month=('0'+(d.getMonth()+1)).slice(-2), day=('0'+d.getDate()).slice(-2);
+    const hours=('0'+d.getHours()).slice(-2), mins=('0'+d.getMinutes()).slice(-2);
+    return `${day}.${month}.${year} ${hours}:${mins}`;
   }
-  // Длительность
-  function formatDuration(s, e) {
+  function formatDuration(s,e) {
     if (!s || !e) return '';
-    let diff = Math.floor((e - s) / 60000), h = Math.floor(diff/60), m = diff%60;
-    let res = '';
-    if (h) res += h+' ч';
-    if (h && m) res += ' ';
-    if (m) res += m+' мин';
+    let diff=Math.floor((e-s)/60000),h=Math.floor(diff/60),m=diff%60, res='';
+    if (h) res+=h+' ч'; if (h && m) res+=' '; if (m) res+=m+' мин';
     return res || '0 мин';
   }
 
-  // Login
+  // Инициализация
+  loadRecords();
+
+  // Вход пользователя
   document.getElementById('loginBtn').onclick = () => {
     const name = document.getElementById('userName').value.trim();
     const err = document.getElementById('loginError');
@@ -118,9 +137,12 @@
     document.getElementById('userGreeting').textContent = name;
     document.getElementById('login').classList.add('hidden');
     document.getElementById('userPanel').classList.remove('hidden');
+    renderUserTable();
+    renderAdminTable();
   };
+  // Вход админа
   document.getElementById('adminLoginBtn').onclick = () => {
-    const pwd = prompt('Введите пароль администратора:');
+    const pwd = prompt('Пароль администратора:');
     if (pwd === 'admin123') {
       document.getElementById('login').classList.add('hidden');
       document.getElementById('adminPanel').classList.remove('hidden');
@@ -128,66 +150,68 @@
     } else alert('Неверный пароль');
   };
 
-  // Activate "Стал"
-  document.getElementById('roomNumber').oninput = (e) => {
+  // Кнопка "Стал"
+  document.getElementById('roomNumber').oninput = e => {
     document.getElementById('startBtn').disabled = !e.target.value.trim();
   };
-
   document.getElementById('startBtn').onclick = () => {
-    const num = document.getElementById('roomNumber').value.trim(); if (!num) return;
+    const num = document.getElementById('roomNumber').value.trim();
+    if (!num) return;
     const now = new Date();
-    records.forEach(r => { if (r.user===currentUser && !r.end) r.end = new Date(); });
+    // закрываем прошлую
+    for (let i=records.length-1;i>=0;i--) {
+      if (records[i].user===currentUser && !records[i].end) {
+        records[i].end = now;
+        break;
+      }
+    }
+    // новая запись
     records.push({user: currentUser, number: num, start: now, end: null});
+    saveRecords();
     document.getElementById('roomNumber').value = '';
     document.getElementById('startBtn').disabled = true;
-    renderUserTable(); renderAdminTable();
+    renderUserTable();
+    renderAdminTable();
   };
 
-  // User table
+  // Рендер таблицы пользователя
   function renderUserTable() {
     const tbody = document.querySelector('#userTable tbody');
     tbody.innerHTML = '';
-    const userRecs = records.filter(r=>r.user===currentUser);
-    userRecs.sort((a,b)=>b.start - a.start);
-    userRecs.forEach(r=>{
+    records.filter(r=>r.user===currentUser)
+           .sort((a,b)=>b.start - a.start)
+           .forEach(r=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${r.number}</td>
         <td>${formatTimeOnly(r.start)}</td>
         <td>${r.end? formatTimeOnly(r.end): ''}</td>
         <td></td>`;
-      const tdAct = tr.lastElementChild;
+      const td = tr.lastElementChild;
       if (!r.end) {
-        const btnEnd = document.createElement('button');
-        btnEnd.textContent = 'Слетел'; btnEnd.className='btn btn-success';
-        btnEnd.onclick = ()=>{ r.end=new Date(); renderUserTable(); renderAdminTable(); };
-        tdAct.appendChild(btnEnd);
+        const endBtn = document.createElement('button');
+        endBtn.textContent = 'Слетел'; endBtn.className = 'btn btn-success';
+        endBtn.onclick = () => { r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
+        td.appendChild(endBtn);
       }
-      const btnEdit = document.createElement('button');
-      btnEdit.textContent='Редактировать'; btnEdit.className='btn btn-primary';
-      btnEdit.onclick = ()=> editRecord(r);
-      tdAct.appendChild(btnEdit);
+      const editBtn = document.createElement('button');
+      editBtn.textContent='Редактировать'; editBtn.className='btn btn-primary';
+      editBtn.onclick = ()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
+      td.appendChild(editBtn);
       tbody.appendChild(tr);
     });
   }
 
-  // Admin table
+  // Рендер таблицы администратора
   function renderAdminTable() {
     const tbody = document.querySelector('#adminTable tbody'); tbody.innerHTML='';
     let arr = records.slice();
-    // фильтры
     const fn = document.getElementById('filterUserName').value.trim().toLowerCase();
     const ds = document.getElementById('filterDateStart').value;
     const de = document.getElementById('filterDateEnd').value;
     if (fn) arr = arr.filter(r=>r.user.toLowerCase().includes(fn));
-    if (ds) {
-      const dstart = new Date(ds);
-      arr = arr.filter(r=>r.start>=dstart);
-    }
-    if (de) {
-      const dend = new Date(de); dend.setDate(dend.getDate()+1);
-      arr = arr.filter(r=>r.start<dend);
-    }
+    if (ds) arr = arr.filter(r=>r.start >= new Date(ds));
+    if (de) { const dt=new Date(de); dt.setDate(dt.getDate()+1); arr=arr.filter(r=>r.start<dt); }
     arr.sort((a,b)=>b.start - a.start);
     arr.forEach(r=>{
       const tr=document.createElement('tr');
@@ -198,18 +222,18 @@
         <td>${r.end?formatDateTime(r.end):''}</td>
         <td>${r.end?formatDuration(r.start,r.end):''}</td>
         <td></td>`;
-      const td = tr.lastElementChild;
+      const td=tr.lastElementChild;
       if (!r.end) {
         const be=document.createElement('button'); be.textContent='Слетел'; be.className='btn btn-success';
-        be.onclick=()=>{ r.end=new Date(); renderUserTable(); renderAdminTable(); };
+        be.onclick=()=>{ r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
         td.appendChild(be);
       }
-      const ed=document.createElement('button'); ed.textContent='Редактировать'; ed.className='btn btn-primary';
-      ed.onclick=()=>editRecord(r);
-      td.appendChild(ed);
-      const del=document.createElement('button'); del.textContent='Удалить'; del.className='btn btn-danger';
-      del.onclick=()=>{ if(confirm('Удалить запись?')){ records=records.filter(x=>x!==r); renderUserTable(); renderAdminTable(); }};
-      td.appendChild(del);
+      const eb=document.createElement('button'); eb.textContent='Редактировать'; eb.className='btn btn-primary';
+      eb.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
+      td.appendChild(eb);
+      const db=document.createElement('button'); db.textContent='Удалить'; db.className='btn btn-danger';
+      db.onclick=()=>{ if(confirm('Удалить запись?')){ records=records.filter(x=>x!==r); saveRecords(); renderUserTable(); renderAdminTable(); }};
+      td.appendChild(db);
       tbody.appendChild(tr);
     });
   }
@@ -221,30 +245,24 @@
     renderAdminTable();
   };
 
-  // Экспорт TXT
+  // Экспорт в TXT
   document.getElementById('exportBtn').onclick = ()=>{
     let txt='';
     document.querySelectorAll('#adminTable tbody tr').forEach(tr=>{
-      const c=tr.querySelectorAll('td');
-      if (!c[0].textContent) return;
-      txt += `${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`;
+      const c=tr.querySelectorAll('td'); if(!c[0].textContent) return;
+      txt+=`${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`;
     });
-    if (!txt) { alert('Нет данных для экспорта'); return; }
+    if(!txt){ alert('Нет данных для экспорта'); return; }
     const blob=new Blob([txt],{type:'text/plain'}), url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download='report.txt'; a.click(); URL.revokeObjectURL(url);
   };
 
-  // Редактирование
+  // Редактирование записи
   function editRecord(rec) {
-    const ns=prompt('Стал (ГГГГ-MM-DD HH:MM)', rec.start? rec.start.toISOString().slice(0,16).replace('T',' '):'');
-    if (ns) {
-      const d=new Date(ns.replace(' ', 'T')); if (!isNaN(d)) rec.start=d; else alert('Неверный формат');
-    }
-    const ne=prompt('Слетел (ГГГГ-MM-DD HH:MM)', rec.end? rec.end.toISOString().slice(0,16).replace('T',' '):'');
-    if (ne) {
-      const d=new Date(ne.replace(' ', 'T')); if (!isNaN(d)) rec.end=d; else alert('Неверный формат');
-    }
-    renderUserTable(); renderAdminTable();
+    const ns = prompt('Стал (ГГГГ-MM-DD ЧЧ:MM)', rec.start.toISOString().slice(0,16).replace('T',' '));
+    if (ns) { const d=new Date(ns.replace(' ','T')); if(!isNaN(d)) rec.start=d; else alert('Неверный формат'); }
+    const ne = prompt('Слетел (ГГГГ-MM-DD ЧЧ:MM)', rec.end? rec.end.toISOString().slice(0,16).replace('T',' '):'');
+    if (ne) { const d=new Date(ne.replace(' ','T')); if(!isNaN(d)) rec.end=d; else alert('Неверный формат'); }
   }
 </script>
 
