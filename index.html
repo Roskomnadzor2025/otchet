@@ -80,14 +80,13 @@
       localStorage.setItem("rentals", JSON.stringify(rentals));
     }
 
-    // Форматирование даты/времени
-    function formatDateTime(dt){
+    // Форматирование времени (без даты)
+    function formatTime(dt){
       if(!dt) return "";
       const d = new Date(dt);
-      return d.toLocaleString("ru-RU", {
-        day: "2-digit", month: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit"
-      });
+      const h = d.getHours();
+      const m = d.getMinutes();
+      return (h<10?"0"+h:h) + ":" + (m<10?"0"+m:m);
     }
     function computeDuration(start, end){
       if(!start || !end) return "";
@@ -108,59 +107,46 @@
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td>${r.number}</td>
-            <td contenteditable data-field="start" data-index="${i}">${formatDateTime(r.start)}</td>
-            <td contenteditable data-field="end"   data-index="${i}">${formatDateTime(r.end)}</td>
+            <td>${formatTime(r.start)}</td>
+            <td>${formatTime(r.end)}</td>
             <td>${computeDuration(r.start, r.end)}</td>
-            <td><button data-action="save-user" data-index="${i}">Сохранить</button></td>
+            <td><button data-action="edit-user" data-index="${i}">Редактировать время</button></td>
           `;
           tbody.appendChild(tr);
         });
     }
 
-    // Рендер таблицы администратора
-    function renderAdminTable(list){
-      const tbody = document.getElementById("admin-rentals-tbody");
-      tbody.innerHTML = "";
-      list.forEach((r, i) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${r.user}</td>
-          <td>${r.number}</td>
-          <td contenteditable data-field="start" data-index="${i}">${formatDateTime(r.start)}</td>
-          <td contenteditable data-field="end"   data-index="${i}">${formatDateTime(r.end)}</td>
-          <td>${computeDuration(r.start, r.end)}</td>
-          <td>
-            <button data-action="save-admin" data-index="${i}">Сохранить</button>
-            <button data-action="delete-admin" data-index="${i}">Удалить</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
+    // Обработчик редактирования времени пользователя
+    function editUserTime(idx){
+      const rec = rentals[idx];
+      const datePart = rec.start ? rec.start.split('T')[0] : new Date().toISOString().split('T')[0];
+      const newStart = prompt("Введите время старта (чч:мм)", formatTime(rec.start));
+      if(newStart !== null){
+        rec.start = datePart + 'T' + newStart + ':00.000Z';
+      }
+      const newEnd = prompt("Введите время окончания (чч:мм)", formatTime(rec.end));
+      if(newEnd !== null){
+        rec.end = datePart + 'T' + newEnd + ':00.000Z';
+      }
+      saveRentals();
+      renderUserTable();
     }
 
-    // Применить фильтры в админ-панели
-    function applyFilters(){
-      let filtered = rentals.slice();
-      const u = document.getElementById("filter-user").value.trim().toLowerCase();
-      const from = document.getElementById("filter-date-from").value;
-      const to   = document.getElementById("filter-date-to").value;
-      if(u) {
-        filtered = filtered.filter(r => r.user.toLowerCase().includes(u));
+    // Обработчик кликов в user-panel
+    document.body.addEventListener("click", e => {
+      const btn = e.target;
+      const action = btn.getAttribute("data-action");
+      const idx = btn.getAttribute("data-index");
+      if(action === "edit-user"){
+        editUserTime(idx);
       }
-      if(from) {
-        filtered = filtered.filter(r => r.start && r.start.slice(0,10) >= from);
-      }
-      if(to) {
-        filtered = filtered.filter(r => r.end   && r.end.slice(0,10)   <= to);
-      }
-      renderAdminTable(filtered);
-    }
+    });
 
     // Экспорт .txt отчета
     function exportReport(){
       const lines = rentals.map(r => {
         const dur = computeDuration(r.start, r.end);
-        return `${r.user}, ${r.number}, ${formatDateTime(r.start)}, ${formatDateTime(r.end)}, ${dur}`;
+        return `${r.user}, ${r.number}, ${formatTime(r.start)}, ${formatTime(r.end)}, ${dur}`;
       });
       const blob = new Blob([lines.join("\n")], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
@@ -173,7 +159,7 @@
 
     // Сброс истории
     function resetHistory(){
-      if(confirm("Удалить все записи?")) {
+      if(confirm("Удалить все записи?")){
         rentals = [];
         saveRentals();
         renderUserTable();
@@ -181,55 +167,72 @@
       }
     }
 
-    // Обработчик кликов в таблицах
+    // Рендер таблицы администратора (без изменений)
+    function renderAdminTable(list){
+      const tbody = document.getElementById("admin-rentals-tbody");
+      tbody.innerHTML = "";
+      list.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${r.user}</td>
+          <td>${r.number}</td>
+          <td contenteditable data-field="start" data-index="${i}">${formatTime(r.start)}</td>
+          <td contenteditable data-field="end"   data-index="${i}">${formatTime(r.end)}</td>
+          <td>${computeDuration(r.start, r.end)}</td>
+          <td>
+            <button data-action="save-admin" data-index="${i}">Сохранить</button>
+            <button data-action="delete-admin" data-index="${i}">Удалить</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Фильтры админа
+    function applyFilters(){
+      let filtered = rentals.slice();
+      const u = document.getElementById("filter-user").value.trim().toLowerCase();
+      const from = document.getElementById("filter-date-from").value;
+      const to   = document.getElementById("filter-date-to").value;
+      if(u) filtered = filtered.filter(r => r.user.toLowerCase().includes(u));
+      if(from) filtered = filtered.filter(r => r.start && r.start.split('T')[0] >= from);
+      if(to)   filtered = filtered.filter(r => r.end   && r.end.split('T')[0]   <= to);
+      renderAdminTable(filtered);
+    }
+
+    // Клики в admin-panel
     document.body.addEventListener("click", e => {
       const btn = e.target;
       const action = btn.getAttribute("data-action");
       const idx = btn.getAttribute("data-index");
-      if(!action) return;
-
-      if(action === "save-user") {
+      if(action === "save-admin"){
         const row = btn.parentNode.parentNode;
         const start = row.querySelector("[data-field=start]").innerText;
         const end   = row.querySelector("[data-field=end]").innerText;
-        rentals[idx].start = new Date(start).toISOString();
-        rentals[idx].end   = new Date(end).toISOString();
-        saveRentals();
-        renderUserTable();
-      }
-      if(action === "save-admin") {
-        const row = btn.parentNode.parentNode;
-        const start = row.querySelector("[data-field=start]").innerText;
-        const end   = row.querySelector("[data-field=end]").innerText;
-        rentals[idx].start = new Date(start).toISOString();
-        rentals[idx].end   = new Date(end).toISOString();
+        const datePart = rentals[idx].start.split('T')[0];
+        rentals[idx].start = datePart + 'T' + start + ':00.000Z';
+        rentals[idx].end   = datePart + 'T' + end   + ':00.000Z';
         saveRentals();
         renderAdminTable(rentals);
       }
-      if(action === "delete-admin") {
-        if(confirm("Удалить запись?")) {
-          rentals.splice(idx, 1);
+      if(action === "delete-admin"){
+        if(confirm("Удалить запись?")){
+          rentals.splice(idx,1);
           saveRentals();
           renderAdminTable(rentals);
         }
       }
     });
 
-    // Кнопки обычного пользователя
+    // Кнопки user-panel
     document.getElementById("start-btn").addEventListener("click", () => {
       const num = document.getElementById("number-input").value.trim();
       if(!num) return alert("Введите номер!");
-      rentals.push({
-        user: currentUser,
-        number: num,
-        start: new Date().toISOString(),
-        end: null
-      });
+      rentals.push({ user: currentUser, number: num, start: new Date().toISOString(), end: null });
       saveRentals();
       renderUserTable();
     });
     document.getElementById("end-btn").addEventListener("click", () => {
-      // находим последний незавершённый rental текущего пользователя
       for(let i = rentals.length - 1; i >= 0; i--) {
         if(rentals[i].user === currentUser && !rentals[i].end) {
           rentals[i].end = new Date().toISOString();
@@ -240,7 +243,7 @@
       renderUserTable();
     });
 
-    // Вход/выход, режим администратора
+    // Вход и режим администратора
     document.getElementById("login-btn").addEventListener("click", () => {
       const name = document.getElementById("username-input").value.trim();
       if(!name) return alert("Введите имя!");
