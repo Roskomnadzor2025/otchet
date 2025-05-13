@@ -42,12 +42,7 @@
   <h3>История аренды</h3>
   <table id="userTable">
     <thead>
-      <tr>
-        <th>Номер</th>
-        <th>Стал</th>
-        <th>Слетел</th>
-        <th>Действия</th>
-      </tr>
+      <tr><th>Номер</th><th>Стал</th><th>Слетел</th><th>Действия</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -62,7 +57,11 @@
     <button class="btn btn-primary" id="applyFilterBtn">Применить фильтр</button>
     <button class="btn btn-secondary" id="clearFilterBtn">Сбросить фильтр</button>
   </div>
-  <button class="btn btn-success" id="exportBtn">Экспорт в TXT</button>
+  <div>
+    <button class="btn btn-success" id="exportTxtBtn">Экспорт в TXT</button>
+    <button class="btn btn-secondary" id="exportJsonBtn">Экспорт JSON</button>
+    <input type="file" id="importJsonInput" accept="application/json">
+  </div>
   <h3>Все записи аренды</h3>
   <table id="adminTable">
     <thead>
@@ -83,7 +82,7 @@
   let currentUser = null;
   let records = [];
 
-  // Загрузка/сохранение из localStorage
+  // Load/save from localStorage
   function loadRecords() {
     const data = localStorage.getItem('records');
     records = data ? JSON.parse(data).map(r => ({
@@ -94,22 +93,20 @@
     })) : [];
   }
   function saveRecords() {
-    const toStore = records.map(r => ({
+    localStorage.setItem('records', JSON.stringify(records.map(r => ({
       user: r.user,
       number: r.number,
       start: r.start.toISOString(),
       end: r.end ? r.end.toISOString() : null
-    }));
-    localStorage.setItem('records', JSON.stringify(toStore));
+    }))));
   }
 
-  // Формат только времени
+  // Formatting
   function formatTimeOnly(date) {
     if (!date) return '';
     const d = new Date(date);
     return d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
   }
-  // Полный формат
   function formatDateTime(date) {
     if (!date) return '';
     const d = new Date(date);
@@ -118,16 +115,16 @@
     return `${day}.${month}.${year} ${hours}:${mins}`;
   }
   function formatDuration(s,e) {
-    if (!s || !e) return '';
-    let diff=Math.floor((e-s)/60000),h=Math.floor(diff/60),m=diff%60, res='';
-    if (h) res+=h+' ч'; if (h && m) res+=' '; if (m) res+=m+' мин';
-    return res || '0 мин';
+    if (!s||!e) return '';
+    let diff=Math.floor((e-s)/60000), h=Math.floor(diff/60), m=diff%60, res='';
+    if (h) res+=h+' ч'; if (h&&m) res+=' '; if (m) res+=m+' мин';
+    return res||'0 мин';
   }
 
-  // Инициализация
+  // Initialize
   loadRecords();
 
-  // Вход пользователя
+  // Login handlers
   document.getElementById('loginBtn').onclick = () => {
     const name = document.getElementById('userName').value.trim();
     const err = document.getElementById('loginError');
@@ -137,10 +134,8 @@
     document.getElementById('userGreeting').textContent = name;
     document.getElementById('login').classList.add('hidden');
     document.getElementById('userPanel').classList.remove('hidden');
-    renderUserTable();
-    renderAdminTable();
+    renderUserTable(); renderAdminTable();
   };
-  // Вход админа
   document.getElementById('adminLoginBtn').onclick = () => {
     const pwd = prompt('Пароль администратора:');
     if (pwd === 'admin123') {
@@ -150,87 +145,68 @@
     } else alert('Неверный пароль');
   };
 
-  // Кнопка "Стал"
+  // "Стал" button activation
   document.getElementById('roomNumber').oninput = e => {
     document.getElementById('startBtn').disabled = !e.target.value.trim();
   };
   document.getElementById('startBtn').onclick = () => {
-    const num = document.getElementById('roomNumber').value.trim();
-    if (!num) return;
+    const num = document.getElementById('roomNumber').value.trim(); if (!num) return;
     const now = new Date();
-    // закрываем прошлую
-    for (let i=records.length-1;i>=0;i--) {
-      if (records[i].user===currentUser && !records[i].end) {
-        records[i].end = now;
-        break;
-      }
+    // close previous
+    for (let i=records.length-1; i>=0; i--) {
+      if (records[i].user===currentUser && !records[i].end) { records[i].end = now; break; }
     }
-    // новая запись
+    // new record
     records.push({user: currentUser, number: num, start: now, end: null});
     saveRecords();
-    document.getElementById('roomNumber').value = '';
-    document.getElementById('startBtn').disabled = true;
-    renderUserTable();
-    renderAdminTable();
+    document.getElementById('roomNumber').value='';
+    document.getElementById('startBtn').disabled=true;
+    renderUserTable(); renderAdminTable();
   };
 
-  // Рендер таблицы пользователя
+  // Render user table
   function renderUserTable() {
-    const tbody = document.querySelector('#userTable tbody');
-    tbody.innerHTML = '';
+    const tbody = document.querySelector('#userTable tbody'); tbody.innerHTML='';
     records.filter(r=>r.user===currentUser)
            .sort((a,b)=>b.start - a.start)
            .forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.number}</td>
-        <td>${formatTimeOnly(r.start)}</td>
-        <td>${r.end? formatTimeOnly(r.end): ''}</td>
-        <td></td>`;
-      const td = tr.lastElementChild;
-      if (!r.end) {
-        const endBtn = document.createElement('button');
-        endBtn.textContent = 'Слетел'; endBtn.className = 'btn btn-success';
-        endBtn.onclick = () => { r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
-        td.appendChild(endBtn);
-      }
-      const editBtn = document.createElement('button');
-      editBtn.textContent='Редактировать'; editBtn.className='btn btn-primary';
-      editBtn.onclick = ()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
-      td.appendChild(editBtn);
-      tbody.appendChild(tr);
-    });
-  }
-
-  // Рендер таблицы администратора
-  function renderAdminTable() {
-    const tbody = document.querySelector('#adminTable tbody'); tbody.innerHTML='';
-    let arr = records.slice();
-    const fn = document.getElementById('filterUserName').value.trim().toLowerCase();
-    const ds = document.getElementById('filterDateStart').value;
-    const de = document.getElementById('filterDateEnd').value;
-    if (fn) arr = arr.filter(r=>r.user.toLowerCase().includes(fn));
-    if (ds) arr = arr.filter(r=>r.start >= new Date(ds));
-    if (de) { const dt=new Date(de); dt.setDate(dt.getDate()+1); arr=arr.filter(r=>r.start<dt); }
-    arr.sort((a,b)=>b.start - a.start);
-    arr.forEach(r=>{
       const tr=document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.user}</td>
-        <td>${r.number}</td>
-        <td>${formatDateTime(r.start)}</td>
-        <td>${r.end?formatDateTime(r.end):''}</td>
-        <td>${r.end?formatDuration(r.start,r.end):''}</td>
-        <td></td>`;
+      tr.innerHTML=`<td>${r.number}</td><td>${formatTimeOnly(r.start)}</td><td>${r.end?formatTimeOnly(r.end):''}</td><td></td>`;
       const td=tr.lastElementChild;
       if (!r.end) {
         const be=document.createElement('button'); be.textContent='Слетел'; be.className='btn btn-success';
         be.onclick=()=>{ r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
         td.appendChild(be);
       }
-      const eb=document.createElement('button'); eb.textContent='Редактировать'; eb.className='btn btn-primary';
-      eb.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
-      td.appendChild(eb);
+      const ed=document.createElement('button'); ed.textContent='Редактировать'; ed.className='btn btn-primary';
+      ed.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
+      td.appendChild(ed);
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Render admin table
+  function renderAdminTable() {
+    const tbody = document.querySelector('#adminTable tbody'); tbody.innerHTML='';
+    let arr = records.slice();
+    const fn=document.getElementById('filterUserName').value.trim().toLowerCase();
+    const ds=document.getElementById('filterDateStart').value;
+    const de=document.getElementById('filterDateEnd').value;
+    if (fn) arr=arr.filter(r=>r.user.toLowerCase().includes(fn));
+    if (ds) arr=arr.filter(r=>r.start>=new Date(ds));
+    if (de) { const dd=new Date(de); dd.setDate(dd.getDate()+1); arr=arr.filter(r=>r.start<dd); }
+    arr.sort((a,b)=>b.start - a.start).forEach(r=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${r.user}</td><td>${r.number}</td><td>${formatDateTime(r.start)}</td><td>${r.end?formatDateTime(r.end):''}</td><td>${r.end?formatDuration(r.start,r.end):''}</td><td></td>`;
+      const td=tr.lastElementChild;
+      if (!r.end) {
+        const be=document.createElement('button'); be.textContent='Слетел'; be.className='btn btn-success';
+        be.onclick=()=>{ r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
+        td.appendChild(be);
+      }
+      const ed=document.createElement('button'); ed.textContent='Редактировать'; ed.className='btn btn-primary';
+      ed.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
+      td.appendChild(ed);
       const db=document.createElement('button'); db.textContent='Удалить'; db.className='btn btn-danger';
       db.onclick=()=>{ if(confirm('Удалить запись?')){ records=records.filter(x=>x!==r); saveRecords(); renderUserTable(); renderAdminTable(); }};
       td.appendChild(db);
@@ -238,31 +214,50 @@
     });
   }
 
-  // Фильтры
-  document.getElementById('applyFilterBtn').onclick = renderAdminTable;
-  document.getElementById('clearFilterBtn').onclick = ()=>{
-    ['filterUserName','filterDateStart','filterDateEnd'].forEach(id=>document.getElementById(id).value='');
-    renderAdminTable();
-  };
+  // Filters
+  document.getElementById('applyFilterBtn').onclick=renderAdminTable;
+  document.getElementById('clearFilterBtn').onclick=()=>{ ['filterUserName','filterDateStart','filterDateEnd'].forEach(id=>document.getElementById(id).value=''); renderAdminTable(); };
 
-  // Экспорт в TXT
-  document.getElementById('exportBtn').onclick = ()=>{
-    let txt='';
-    document.querySelectorAll('#adminTable tbody tr').forEach(tr=>{
+  // Export TXT
+  document.getElementById('exportTxtBtn').onclick=()=>{
+    let txt=''; document.querySelectorAll('#adminTable tbody tr').forEach(tr=>{
       const c=tr.querySelectorAll('td'); if(!c[0].textContent) return;
       txt+=`${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`;
-    });
-    if(!txt){ alert('Нет данных для экспорта'); return; }
-    const blob=new Blob([txt],{type:'text/plain'}), url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='report.txt'; a.click(); URL.revokeObjectURL(url);
+    }); if(!txt){ alert('Нет данных для экспорта'); return; }
+    const blob=new Blob([txt],{type:'text/plain'}),u=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=u; a.download='report.txt'; a.click(); URL.revokeObjectURL(u);
   };
 
-  // Редактирование записи
+  // Export JSON
+  document.getElementById('exportJsonBtn').onclick=()=>{
+    const dataStr = JSON.stringify(records.map(r=>({
+      user:r.user, number:r.number,
+      start:r.start.toISOString(), end:r.end? r.end.toISOString():null
+    })), null, 2);
+    const blob=new Blob([dataStr],{type:'application/json'}),u=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=u; a.download='records.json'; a.click(); URL.revokeObjectURL(u);
+  };
+
+  // Import JSON
+  document.getElementById('importJsonInput').addEventListener('change', e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const arr=JSON.parse(reader.result);
+        records = arr.map(r=>({ user:r.user, number:r.number, start:new Date(r.start), end:r.end?new Date(r.end):null }));
+        saveRecords(); renderUserTable(); renderAdminTable(); alert('Импорт завершён');
+      } catch(err){ alert('Некорректный JSON'); }
+    };
+    reader.readAsText(file);
+  });
+
+  // Edit record
   function editRecord(rec) {
-    const ns = prompt('Стал (ГГГГ-MM-DD ЧЧ:MM)', rec.start.toISOString().slice(0,16).replace('T',' '));
-    if (ns) { const d=new Date(ns.replace(' ','T')); if(!isNaN(d)) rec.start=d; else alert('Неверный формат'); }
-    const ne = prompt('Слетел (ГГГГ-MM-DD ЧЧ:MM)', rec.end? rec.end.toISOString().slice(0,16).replace('T',' '):'');
-    if (ne) { const d=new Date(ne.replace(' ','T')); if(!isNaN(d)) rec.end=d; else alert('Неверный формат'); }
+    const ns=prompt('Стал (ГГГГ-MM-DD ЧЧ:MM)', rec.start.toISOString().slice(0,16).replace('T',' '));
+    if(ns){ const d=new Date(ns.replace(' ','T')); if(!isNaN(d)) rec.start=d; else alert('Неверный формат'); }
+    const ne=prompt('Слетел (ГГГГ-MM-DD ЧЧ:MM)', rec.end?rec.end.toISOString().slice(0,16).replace('T',' '):'');
+    if(ne){ const d=new Date(ne.replace(' ','T')); if(!isNaN(d)) rec.end=d; else alert('Неверный формат'); }
   }
 </script>
 
