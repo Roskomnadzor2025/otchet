@@ -22,6 +22,9 @@
     .filter-group { margin-bottom: 10px; background-color: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
     .error { color: #d9534f; margin-top: 5px; }
   </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js"></script>
 </head>
 <body>
 
@@ -41,9 +44,7 @@
   </div>
   <h3>История аренды</h3>
   <table id="userTable">
-    <thead>
-      <tr><th>Номер</th><th>Стал</th><th>Слетел</th><th>Действия</th></tr>
-    </thead>
+    <thead><tr><th>Номер</th><th>Стал</th><th>Слетел</th><th>Действия</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
@@ -64,152 +65,106 @@
   </div>
   <h3>Все записи аренды</h3>
   <table id="adminTable">
-    <thead>
-      <tr>
-        <th>Пользователь</th>
-        <th>Номер</th>
-        <th>Стал</th>
-        <th>Слетел</th>
-        <th>Общее время</th>
-        <th>Действия</th>
-      </tr>
-    </thead>
+    <thead><tr><th>Пользователь</th><th>Номер</th><th>Стал</th><th>Слетел</th><th>Общее время</th><th>Действия</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
 
 <script>
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+  // TODO: Замените конфигурацию на вашу Firebase
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
   let currentUser = null;
   let records = [];
 
-  // Load/save from localStorage
-  function loadRecords() {
-    const data = localStorage.getItem('records');
-    records = data ? JSON.parse(data).map(r => ({
-      user: r.user,
-      number: r.number,
-      start: new Date(r.start),
-      end: r.end ? new Date(r.end) : null
-    })) : [];
-  }
-  function saveRecords() {
-    localStorage.setItem('records', JSON.stringify(records.map(r => ({
-      user: r.user,
-      number: r.number,
-      start: r.start.toISOString(),
-      end: r.end ? r.end.toISOString() : null
-    }))));
-  }
+  // Слушаем коллекцию в реальном времени
+  onSnapshot(collection(db, "records"), snapshot => {
+    records = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        user: data.user,
+        number: data.number,
+        start: data.start.toDate(),
+        end: data.end ? data.end.toDate() : null
+      };
+    });
+    renderUserTable();
+    renderAdminTable();
+  });
 
-  // Formatting
-  function formatTimeOnly(date) {
-    if (!date) return '';
-    const d = new Date(date);
-    return d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-  }
-  function formatDateTime(date) {
-    if (!date) return '';
-    const d = new Date(date);
-    const year=d.getFullYear(), month=('0'+(d.getMonth()+1)).slice(-2), day=('0'+d.getDate()).slice(-2);
-    const hours=('0'+d.getHours()).slice(-2), mins=('0'+d.getMinutes()).slice(-2);
-    return `${day}.${month}.${year} ${hours}:${mins}`;
-  }
-  function formatDuration(s,e) {
-    if (!s||!e) return '';
-    let diff=Math.floor((e-s)/60000), h=Math.floor(diff/60), m=diff%60, res='';
-    if (h) res+=h+' ч'; if (h&&m) res+=' '; if (m) res+=m+' мин';
-    return res||'0 мин';
-  }
+  // Форматы
+  function formatTimeOnly(date) { if (!date) return ''; return date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); }
+  function formatDateTime(date) { if (!date) return ''; const d=new Date(date); const year=d.getFullYear(),M=('0'+(d.getMonth()+1)).slice(-2),D=('0'+d.getDate()).slice(-2),h=('0'+d.getHours()).slice(-2),m=('0'+d.getMinutes()).slice(-2); return `${D}.${M}.${year} ${h}:${m}`; }
+  function formatDuration(s,e){ if(!s||!e)return''; let diff=Math.floor((e-s)/60000),h=Math.floor(diff/60),m=diff%60,res=''; if(h)res+=h+' ч'; if(h&&m)res+=' '; if(m)res+=m+' мин'; return res||'0 мин'; }
 
-  // Initialize
-  loadRecords();
-
-  // Login handlers
+  // Login
   document.getElementById('loginBtn').onclick = () => {
     const name = document.getElementById('userName').value.trim();
-    const err = document.getElementById('loginError');
-    if (!name) { err.classList.remove('hidden'); return; }
-    err.classList.add('hidden');
+    if (!name) { document.getElementById('loginError').classList.remove('hidden'); return; }
+    document.getElementById('loginError').classList.add('hidden');
     currentUser = name;
     document.getElementById('userGreeting').textContent = name;
     document.getElementById('login').classList.add('hidden');
     document.getElementById('userPanel').classList.remove('hidden');
-    renderUserTable(); renderAdminTable();
   };
   document.getElementById('adminLoginBtn').onclick = () => {
     const pwd = prompt('Пароль администратора:');
     if (pwd === 'admin123') {
       document.getElementById('login').classList.add('hidden');
       document.getElementById('adminPanel').classList.remove('hidden');
-      renderAdminTable();
     } else alert('Неверный пароль');
   };
 
-  // "Стал" button activation
-  document.getElementById('roomNumber').oninput = e => {
-    document.getElementById('startBtn').disabled = !e.target.value.trim();
-  };
-  document.getElementById('startBtn').onclick = () => {
-    const num = document.getElementById('roomNumber').value.trim(); if (!num) return;
-    const now = new Date();
-    // close previous
-    for (let i=records.length-1; i>=0; i--) {
-      if (records[i].user===currentUser && !records[i].end) { records[i].end = now; break; }
-    }
-    // new record
-    records.push({user: currentUser, number: num, start: now, end: null});
-    saveRecords();
-    document.getElementById('roomNumber').value='';
-    document.getElementById('startBtn').disabled=true;
-    renderUserTable(); renderAdminTable();
+  // Add record
+  document.getElementById('roomNumber').oninput = e => { document.getElementById('startBtn').disabled = !e.target.value.trim(); };
+  document.getElementById('startBtn').onclick = async () => {
+    const num = document.getElementById('roomNumber').value.trim(); if(!num)return;
+    const now = serverTimestamp();
+    // Close prev
+    const prev = records.find(r=>r.user===currentUser && !r.end);
+    if(prev) await setDoc(doc(db,"records",prev.id),{ ...prev, end: serverTimestamp() },{ merge:true });
+    // Add new
+    await addDoc(collection(db,"records"),{ user:currentUser, number:num, start:now, end:null });
+    document.getElementById('roomNumber').value=''; document.getElementById('startBtn').disabled=true;
   };
 
   // Render user table
-  function renderUserTable() {
+  function renderUserTable(){
     const tbody = document.querySelector('#userTable tbody'); tbody.innerHTML='';
-    records.filter(r=>r.user===currentUser)
-           .sort((a,b)=>b.start - a.start)
-           .forEach(r=>{
+    records.filter(r=>r.user===currentUser).sort((a,b)=>b.start-a.start).forEach(r=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`<td>${r.number}</td><td>${formatTimeOnly(r.start)}</td><td>${r.end?formatTimeOnly(r.end):''}</td><td></td>`;
       const td=tr.lastElementChild;
-      if (!r.end) {
-        const be=document.createElement('button'); be.textContent='Слетел'; be.className='btn btn-success';
-        be.onclick=()=>{ r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
-        td.appendChild(be);
-      }
-      const ed=document.createElement('button'); ed.textContent='Редактировать'; ed.className='btn btn-primary';
-      ed.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
-      td.appendChild(ed);
+      if(!r.end){ const b=document.createElement('button'); b.textContent='Слетел'; b.className='btn btn-success'; b.onclick=()=>setDoc(doc(db,'records',r.id),{ end: serverTimestamp() },{ merge:true }); td.appendChild(b); }
+      const e=document.createElement('button'); e.textContent='Редактировать'; e.className='btn btn-primary'; e.onclick=()=>editRecord(r); td.appendChild(e);
       tbody.appendChild(tr);
     });
   }
 
   // Render admin table
-  function renderAdminTable() {
+  function renderAdminTable(){
     const tbody = document.querySelector('#adminTable tbody'); tbody.innerHTML='';
-    let arr = records.slice();
-    const fn=document.getElementById('filterUserName').value.trim().toLowerCase();
-    const ds=document.getElementById('filterDateStart').value;
-    const de=document.getElementById('filterDateEnd').value;
-    if (fn) arr=arr.filter(r=>r.user.toLowerCase().includes(fn));
-    if (ds) arr=arr.filter(r=>r.start>=new Date(ds));
-    if (de) { const dd=new Date(de); dd.setDate(dd.getDate()+1); arr=arr.filter(r=>r.start<dd); }
-    arr.sort((a,b)=>b.start - a.start).forEach(r=>{
+    let arr=records.slice(); const fn=document.getElementById('filterUserName').value.trim().toLowerCase(); const ds=document.getElementById('filterDateStart').value; const de=document.getElementById('filterDateEnd').value;
+    if(fn)arr=arr.filter(r=>r.user.toLowerCase().includes(fn)); if(ds){ const d=new Date(ds); arr=arr.filter(r=>r.start>=d);} if(de){ const d=new Date(de); d.setDate(d.getDate()+1); arr=arr.filter(r=>r.start<d);} arr.sort((a,b)=>b.start-a.start).forEach(r=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`<td>${r.user}</td><td>${r.number}</td><td>${formatDateTime(r.start)}</td><td>${r.end?formatDateTime(r.end):''}</td><td>${r.end?formatDuration(r.start,r.end):''}</td><td></td>`;
       const td=tr.lastElementChild;
-      if (!r.end) {
-        const be=document.createElement('button'); be.textContent='Слетел'; be.className='btn btn-success';
-        be.onclick=()=>{ r.end=new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
-        td.appendChild(be);
-      }
-      const ed=document.createElement('button'); ed.textContent='Редактировать'; ed.className='btn btn-primary';
-      ed.onclick=()=>{ editRecord(r); saveRecords(); renderUserTable(); renderAdminTable(); };
-      td.appendChild(ed);
-      const db=document.createElement('button'); db.textContent='Удалить'; db.className='btn btn-danger';
-      db.onclick=()=>{ if(confirm('Удалить запись?')){ records=records.filter(x=>x!==r); saveRecords(); renderUserTable(); renderAdminTable(); }};
-      td.appendChild(db);
+      if(!r.end){ const b=document.createElement('button'); b.textContent='Слетел'; b.className='btn btn-success'; b.onclick=()=>setDoc(doc(db,'records',r.id),{ end: serverTimestamp() },{ merge:true }); td.appendChild(b);} 
+      const e=document.createElement('button'); e.textContent='Редактировать'; e.className='btn btn-primary'; e.onclick=()=>editRecord(r); td.appendChild(e);
+      const d=document.createElement('button'); d.textContent='Удалить'; d.className='btn btn-danger'; d.onclick=()=>deleteDoc(doc(db,'records',r.id)); td.appendChild(d);
       tbody.appendChild(tr);
     });
   }
@@ -219,46 +174,16 @@
   document.getElementById('clearFilterBtn').onclick=()=>{ ['filterUserName','filterDateStart','filterDateEnd'].forEach(id=>document.getElementById(id).value=''); renderAdminTable(); };
 
   // Export TXT
-  document.getElementById('exportTxtBtn').onclick=()=>{
-    let txt=''; document.querySelectorAll('#adminTable tbody tr').forEach(tr=>{
-      const c=tr.querySelectorAll('td'); if(!c[0].textContent) return;
-      txt+=`${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`;
-    }); if(!txt){ alert('Нет данных для экспорта'); return; }
-    const blob=new Blob([txt],{type:'text/plain'}),u=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=u; a.download='report.txt'; a.click(); URL.revokeObjectURL(u);
-  };
+  document.getElementById('exportTxtBtn').onclick=()=>{ let txt=''; document.querySelectorAll('#adminTable tbody tr').forEach(tr=>{ const c=tr.querySelectorAll('td'); if(!c[0].textContent)return; txt+=`${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`; }); if(!txt){alert('Нет данных');return;} const blob=new Blob([txt],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='report.txt';a.click();URL.revokeObjectURL(url); };
 
   // Export JSON
-  document.getElementById('exportJsonBtn').onclick=()=>{
-    const dataStr = JSON.stringify(records.map(r=>({
-      user:r.user, number:r.number,
-      start:r.start.toISOString(), end:r.end? r.end.toISOString():null
-    })), null, 2);
-    const blob=new Blob([dataStr],{type:'application/json'}),u=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=u; a.download='records.json'; a.click(); URL.revokeObjectURL(u);
-  };
+  document.getElementById('exportJsonBtn').onclick=()=>{ const data=JSON.stringify(records.map(r=>({user:r.user,number:r.number,start:r.start, end:r.end})),null,2); const blob=new Blob([data],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='records.json';a.click();URL.revokeObjectURL(u);}  
 
   // Import JSON
-  document.getElementById('importJsonInput').addEventListener('change', e=>{
-    const file=e.target.files[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=()=>{
-      try{
-        const arr=JSON.parse(reader.result);
-        records = arr.map(r=>({ user:r.user, number:r.number, start:new Date(r.start), end:r.end?new Date(r.end):null }));
-        saveRecords(); renderUserTable(); renderAdminTable(); alert('Импорт завершён');
-      } catch(err){ alert('Некорректный JSON'); }
-    };
-    reader.readAsText(file);
-  });
+  document.getElementById('importJsonInput').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ const arr=JSON.parse(r.result); arr.forEach(async rec=>{ const docRef=await addDoc(collection(db,'records'),{ user:rec.user, number:rec.number, start:new Date(rec.start), end:rec.end?new Date(rec.end):null }); }); alert('Импорт завершён'); }catch{alert('Ошибка JSON');} }; r.readAsText(f);} );
 
   // Edit record
-  function editRecord(rec) {
-    const ns=prompt('Стал (ГГГГ-MM-DD ЧЧ:MM)', rec.start.toISOString().slice(0,16).replace('T',' '));
-    if(ns){ const d=new Date(ns.replace(' ','T')); if(!isNaN(d)) rec.start=d; else alert('Неверный формат'); }
-    const ne=prompt('Слетел (ГГГГ-MM-DD ЧЧ:MM)', rec.end?rec.end.toISOString().slice(0,16).replace('T',' '):'');
-    if(ne){ const d=new Date(ne.replace(' ','T')); if(!isNaN(d)) rec.end=d; else alert('Неверный формат'); }
-  }
+  function editRecord(r){ const ns=prompt('Стал (ГГГГ-MM-DD ЧЧ:MM)', r.start.toISOString().slice(0,16).replace('T',' ')); if(ns){ const d=new Date(ns.replace(' ','T')); if(!isNaN(d)) setDoc(doc(db,'records',r.id),{ start:d },{ merge:true }); else alert('Неверный формат'); } const ne=prompt('Слетел (ГГГГ-MM-DD ЧЧ:MM)', r.end?r.end.toISOString().slice(0,16).replace('T',' '):''); if(ne){ const d=new Date(ne.replace(' ','T')); if(!isNaN(d)) setDoc(doc(db,'records',r.id),{ end:d },{ merge:true }); else alert('Неверный формат'); }}
 </script>
 
 </body>
