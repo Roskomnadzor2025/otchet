@@ -2,396 +2,189 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Учёт аренды номеров</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Отчет по номерам</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-      color: #333;
-    }
-    .hidden { display: none; }
-    h1, h2, h3 { margin-top: 0; }
-    .card {
-      background: #fff;
-      padding: 16px;
-      border-radius: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      margin-bottom: 24px;
-    }
-    .input-group {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    input[type="text"], input[type="date"] {
-      flex: 1;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 1rem;
-    }
-    button {
-      padding: 8px 12px;
-      font-size: 1rem;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    .btn-primary { background: #4a90e2; color: #fff; }
-    .btn-success { background: #5cb85c; color: #fff; }
-    .btn-danger  { background: #d9534f; color: #fff; }
-    .btn-secondary { background: #6c757d; color: #fff; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-    }
-    th, td {
-      padding: 8px;
-      border: 1px solid #ddd;
-      text-align: left;
-    }
-    th {
-      background: #f0f0f0;
-    }
-    tr:nth-child(even) { background: #fcfcfc; }
-    .actions button {
-      margin-right: 4px;
-      background: none;
-      color: #4a90e2;
-      font-size: 1rem;
-    }
-    .actions .end { color: #5cb85c; }
-    .filter-group {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
+    body { font-family: sans-serif; background: #f9f9f9; margin: 0; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 1.5em; margin: 0 0 0.5em; }
+    #report-list .entry { padding: 0.5em 0; border-bottom: 1px solid #e0e0e0; line-height: 1.4; }
+    #report-list .entry:last-child { border-bottom: none; }
+    label { font-weight: 600; margin-right: 0.5em; }
+    input[type=text] { padding: 0.3em 0.5em; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; }
+    input[type=text]:focus { outline: none; border-color: #66afe9; box-shadow: 0 0 2px rgba(102,175,233,0.6); }
+    button.btn { padding: 0.4em 0.8em; font-size: 1em; color: #fff; background-color: #1976D2; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5em; }
+    button.btn:hover { background-color: #1565C0; }
+    .icon-btn { background: none; border: none; cursor: pointer; font-size: 1em; vertical-align: middle; user-select: none; }
+    .edit-entry { margin-left: 0.5em; color: #555; } .edit-entry:hover { color: #000; }
+    .delete-entry { margin-left: 0.5em; color: #d32f2f; } .delete-entry:hover { color: #b71c1c; }
+    #edit-modal { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index:100; }
+    #edit-modal .modal-content { background:#fff; padding:1em 1.5em; border-radius:4px; max-width:300px; width:90%; }
+    #edit-modal .modal-content h3 { margin:0 0 0.5em; font-size:1.2em; }
+    #edit-modal .modal-content label { font-weight:600; display:block; margin:0.5em 0 0.2em; }
+    #edit-modal .modal-content input[type=text] { width:100%; box-sizing:border-box; margin-bottom:0.5em; }
+    #edit-modal .modal-content button { margin-right:0.5em; }
+    #edit-modal .modal-content button:last-child { margin-right:0; }
   </style>
 </head>
 <body>
-
-  <!-- Логин -->
-  <div id="login" class="card">
-    <h1>Учёт аренды номеров</h1>
-    <div class="input-group">
-      <input type="text" id="userName" placeholder="Ваше имя">
-      <button class="btn btn-primary" id="loginBtn">Войти</button>
-      <button class="btn btn-danger" id="adminLoginBtn">Войти как админ</button>
+  <div class="container">
+    <h1 id="report-title" style="display:none;">Отчет по номерам для <span id="name-display"></span></h1>
+    <div id="name-section">
+      <label for="name-input">Имя:</label>
+      <input id="name-input" type="text" placeholder="Ваше имя">
+      <button id="set-name-button" class="btn">OK</button>
     </div>
-    <div id="loginError" style="color:#d9534f;display:none;">Введите имя</div>
+    <div id="entry-section" style="display:none; margin-top:1em;">
+      <label for="number-input">Номер:</label>
+      <input id="number-input" type="text" placeholder="Введите номер">
+      <button id="add-button" class="btn">Добавить</button>
+      <button id="end-button" class="btn">Завершить</button>
+      <button id="download-button" class="btn">Скачать отчёт</button>
+    </div>
+    <div id="report-list"></div>
   </div>
-
-  <!-- Клиентская панель -->
-  <div id="userPanel" class="card hidden">
-    <h2>Добро пожаловать, <span id="userGreeting"></span>!</h2>
-    <div class="input-group">
-      <input type="text" id="roomNumber" placeholder="Номер">
-      <button class="btn btn-success" id="startBtn" disabled>Стал</button>
+  <div id="edit-modal">
+    <div class="modal-content">
+      <h3>Редактировать запись</h3>
+      <label for="edit-number">Номер:</label>
+      <input id="edit-number" type="text">
+      <label for="edit-start">Начало (HH:MM):</label>
+      <input id="edit-start" type="text" placeholder="HH:MM">
+      <label for="edit-end">Конец (HH:MM):</label>
+      <input id="edit-end" type="text" placeholder="HH:MM">
+      <div style="text-align:right; margin-top:0.5em;">
+        <button id="save-edit" class="btn">Сохранить</button>
+        <button id="cancel-edit" class="btn">Отмена</button>
+      </div>
     </div>
-    <h3>История аренды</h3>
-    <table id="userTable">
-      <thead>
-        <tr><th>Номер</th><th>Стал</th><th>Слетел</th><th>Действия</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
   </div>
+  <script>
+    let userName = localStorage.getItem('reportName') || '';
+    let entries = JSON.parse(localStorage.getItem('reportEntries') || '[]');
+    let editIndex = null;
+    const nameInput = document.getElementById('name-input');
+    const setNameBtn = document.getElementById('set-name-button');
+    const nameSection = document.getElementById('name-section');
+    const entrySection = document.getElementById('entry-section');
+    const nameDisplay = document.getElementById('name-display');
+    const reportTitle = document.getElementById('report-title');
+    const numberInput = document.getElementById('number-input');
+    const addBtn = document.getElementById('add-button');
+    const endBtn = document.getElementById('end-button');
+    const downloadBtn = document.getElementById('download-button');
+    const reportListDiv = document.getElementById('report-list');
+    const editModal = document.getElementById('edit-modal');
+    const editNumberInput = document.getElementById('edit-number');
+    const editStartInput = document.getElementById('edit-start');
+    const editEndInput = document.getElementById('edit-end');
+    const saveEditBtn = document.getElementById('save-edit');
+    const cancelEditBtn = document.getElementById('cancel-edit');
 
-  <!-- Админ-панель -->
-  <div id="adminPanel" class="card hidden">
-    <h2>Панель администратора</h2>
-    <div class="filter-group">
-      <input type="text" id="filterUserName" placeholder="Пользователь">
-      <input type="date" id="filterDateStart">
-      <input type="date" id="filterDateEnd">
-      <button class="btn btn-primary" id="applyFilterBtn">Фильтровать</button>
-      <button class="btn btn-secondary" id="clearFilterBtn">Сбросить</button>
-    </div>
-    <div class="input-group">
-      <button class="btn btn-success" id="exportTxtBtn">Экспорт TXT</button>
-      <button class="btn btn-secondary" id="exportJsonBtn">Экспорт JSON</button>
-      <input type="file" id="importJsonInput" accept="application/json">
-    </div>
-    <h3>Все записи аренды</h3>
-    <table id="adminTable">
-      <thead>
-        <tr>
-          <th>Пользователь</th><th>Номер</th><th>Стал</th><th>Слетел</th><th>Общее время</th><th>Действия</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-
-<script>
-  let currentUser = null;
-  let records = [];
-
-  // Загрузка/сохранение
-  function loadRecords() {
-    const data = localStorage.getItem('records');
-    records = data ? JSON.parse(data).map(r=>({
-      user: r.user,
-      number: r.number,
-      start: new Date(r.start),
-      end: r.end ? new Date(r.end) : null
-    })) : [];
-  }
-  function saveRecords() {
-    localStorage.setItem('records', JSON.stringify(records.map(r=>({
-      user: r.user,
-      number: r.number,
-      start: r.start.toISOString(),
-      end: r.end ? r.end.toISOString() : null
-    }))));
-  }
-
-  // Форматирование
-  function fmtTime(d) {
-    if (!d) return '';
-    return new Date(d).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-  }
-  function fmtDateTime(d) {
-    if (!d) return '';
-    return new Date(d).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  }
-  function fmtDur(s,e) {
-    if (!s||!e) return '';
-    let diff = Math.floor((e-s)/60000), h = Math.floor(diff/60), m = diff%60;
-    return (h? h+' ч ':'') + m+' мин';
-  }
-
-  // Инициализация
-  loadRecords();
-
-  // Вход пользователя
-  document.getElementById('loginBtn').onclick = () => {
-    const name = document.getElementById('userName').value.trim();
-    if (!name) {
-      document.getElementById('loginError').style.display = 'block';
-      return;
+    function getCurrentTimeStr() {
+      const now = new Date();
+      const opts = {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Europe/Kyiv'};
+      try { return now.toLocaleTimeString([], opts); }
+      catch { opts.timeZone = 'Europe/Kiev'; return now.toLocaleTimeString([], opts); }
     }
-    document.getElementById('loginError').style.display = 'none';
-    currentUser = name;
-    document.getElementById('userGreeting').textContent = name;
-    document.getElementById('login').classList.add('hidden');
-    document.getElementById('userPanel').classList.remove('hidden');
-    renderUserTable();
-    renderAdminTable();
-  };
 
-  // Вход администратора
-  document.getElementById('adminLoginBtn').onclick = () => {
-    const pwd = prompt('Пароль администратора:');
-    if (pwd === 'admin123') {
-      document.getElementById('login').classList.add('hidden');
-      document.getElementById('adminPanel').classList.remove('hidden');
-      renderAdminTable();
-    } else {
-      alert('Неверный пароль');
-    }
-  };
-
-  // Активация кнопки «Стал»
-  document.getElementById('roomNumber').oninput = e => {
-    document.getElementById('startBtn').disabled = !e.target.value.trim();
-  };
-
-  // Обработчик «Стал»
-  document.getElementById('startBtn').onclick = () => {
-    const num = document.getElementById('roomNumber').value.trim();
-    const now = new Date();
-    // Закрыть предыдущую
-    for (let i = records.length - 1; i >= 0; i--) {
-      if (records[i].user === currentUser && !records[i].end) {
-        records[i].end = now;
-        break;
+    function renderList() {
+      reportListDiv.innerHTML = '';
+      if (userName) {
+        reportTitle.style.display = '';
+        nameDisplay.textContent = userName;
+      }
+      endBtn.disabled = !entries.some(e => !e.end);
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        const div = document.createElement('div');
+        div.className = 'entry';
+        div.textContent = `${e.number}  ${e.start} - ${e.end || ''}`;
+        const editBtn = document.createElement('button'); editBtn.className='icon-btn edit-entry'; editBtn.textContent='✏'; editBtn.onclick=() => openEditModal(i);
+        const delBtn = document.createElement('button'); delBtn.className='icon-btn delete-entry'; delBtn.textContent='✖'; delBtn.onclick=() => deleteEntry(i);
+        div.append(editBtn, delBtn);
+        reportListDiv.appendChild(div);
       }
     }
-    // Добавить новую
-    records.push({ user: currentUser, number: num, start: now, end: null });
-    saveRecords();
-    document.getElementById('roomNumber').value = '';
-    document.getElementById('startBtn').disabled = true;
-    renderUserTable();
-    renderAdminTable();
-  };
 
-  // Рендер таблицы пользователя
-  function renderUserTable() {
-    const tbody = document.querySelector('#userTable tbody');
-    tbody.innerHTML = '';
-    loadRecords();
-    records
-      .filter(r => r.user === currentUser)
-      .sort((a,b) => b.start - a.start)
-      .forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${r.number}</td>
-          <td>${fmtTime(r.start)}</td>
-          <td>${fmtTime(r.end)}</td>
-          <td class="actions"></td>
-        `;
-        const act = tr.querySelector('.actions');
-        if (!r.end) {
-          const btnEnd = document.createElement('button');
-          btnEnd.textContent = 'Слетел';
-          btnEnd.className = 'end';
-          btnEnd.onclick = () => { r.end = new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
-          act.append(btnEnd);
-        }
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Редактировать';
-        btnEdit.onclick = () => editRecord(r);
-        act.append(btnEdit);
-        tbody.appendChild(tr);
-      });
-  }
+    function addEntry() {
+      const num = numberInput.value.trim(); if (!num) return;
+      const now = getCurrentTimeStr();
+      if (entries.length && !entries[entries.length-1].end) entries[entries.length-1].end = now;
+      entries.push({number: num, start: now, end: ''});
+      save(); numberInput.value=''; renderList(); numberInput.focus();
+    }
 
-  // Рендер таблицы администратора
-  function renderAdminTable() {
-    const tbody = document.querySelector('#adminTable tbody');
-    tbody.innerHTML = '';
-    loadRecords();
-    let arr = records.slice();
-    const fn = document.getElementById('filterUserName').value.trim().toLowerCase();
-    const ds = document.getElementById('filterDateStart').value;
-    const de = document.getElementById('filterDateEnd').value;
-    if (fn) arr = arr.filter(r => r.user.toLowerCase().includes(fn));
-    if (ds)  arr = arr.filter(r => r.start >= new Date(ds));
-    if (de) { const dt = new Date(de); dt.setDate(dt.getDate()+1); arr = arr.filter(r => r.start < dt); }
-    arr.sort((a,b) => b.start - a.start)
-      .forEach(r => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${r.user}</td>
-          <td>${r.number}</td>
-          <td>${fmtDateTime(r.start)}</td>
-          <td>${fmtDateTime(r.end)}</td>
-          <td>${fmtDur(r.start,r.end)}</td>
-          <td class="actions"></td>
-        `;
-        const act = tr.querySelector('.actions');
-        if (!r.end) {
-          const btnEnd = document.createElement('button');
-          btnEnd.textContent = 'Слетел';
-          btnEnd.className = 'end';
-          btnEnd.onclick = () => { r.end = new Date(); saveRecords(); renderUserTable(); renderAdminTable(); };
-          act.append(btnEnd);
-        }
-        const btnEdit = document.createElement('button');
-        btnEdit.textContent = 'Редактировать';
-        btnEdit.onclick = () => editRecord(r);
-        act.append(btnEdit);
-        const btnDel = document.createElement('button');
-        btnDel.textContent = 'Удалить';
-        btnDel.className = 'btn-danger';
-        btnDel.onclick = () => {
-          if (confirm('Удалить запись?')) {
-            records = records.filter(x => x !== r);
-            saveRecords();
-            renderUserTable();
-            renderAdminTable();
-          }
-        };
-        act.append(btnDel);
-        tbody.appendChild(tr);
-      });
-  }
+    function endEntry() {
+      const last = entries[entries.length-1];
+      if (last && !last.end) { last.end = getCurrentTimeStr(); save(); renderList(); }
+      numberInput.focus();
+    }
 
-  // Применить/сбросить фильтры
-  document.getElementById('applyFilterBtn').onclick  = renderAdminTable;
-  document.getElementById('clearFilterBtn').onclick = () => {
-    ['filterUserName','filterDateStart','filterDateEnd']
-      .forEach(id => document.getElementById(id).value = '');
-    renderAdminTable();
-  };
+    function openEditModal(i) {
+      editIndex = i;
+      const e = entries[i];
+      editNumberInput.value = e.number;
+      editStartInput.value = e.start;
+      editEndInput.value = e.end || '';
+      editModal.style.display = 'flex'; editNumberInput.focus();
+    }
 
-  // Экспорт TXT
-  document.getElementById('exportTxtBtn').onclick = () => {
-    let txt = '';
-    document.querySelectorAll('#adminTable tbody tr').forEach(tr => {
-      const c = tr.querySelectorAll('td');
-      if (!c[0].textContent) return;
-      txt += `${c[0].textContent}, ${c[1].textContent}, ${c[2].textContent} - ${c[3].textContent}, ${c[4].textContent}\n`;
+    function closeEditModal() { editModal.style.display='none'; editIndex=null; }
+
+    function saveEdit() {
+      if (editIndex === null) return closeEditModal();
+      const n = editNumberInput.value.trim();
+      const s = editStartInput.value.trim();
+      const e = editEndInput.value.trim();
+      if (!n) { alert('Введите номер'); return; }
+      const fmt = t => { if (!t) return ''; const p=t.split(':'); return p[0].padStart(2,'0')+':'+p[1].padStart(2,'0'); };
+      entries[editIndex] = {number: n, start: fmt(s), end: fmt(e)};
+      save(); closeEditModal(); renderList();
+    }
+
+    function deleteEntry(i) {
+      if (!confirm('Удалить запись?')) return;
+      entries.splice(i,1); save(); renderList();
+    }
+
+    function downloadReport() {
+      if (!userName) { alert('Введите имя'); return; }
+      let txt = `Отчет по номерам для ${userName}\r\n`;
+      entries.forEach(e => txt += `${e.number}  ${e.start} - ${e.end || ''}\r\n`);
+      const blob = new Blob([txt],{type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='report.txt'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function save() {
+      localStorage.setItem('reportEntries', JSON.stringify(entries));
+    }
+
+    // Warn before unload if entries exist
+    window.addEventListener('beforeunload', e => {
+      if (entries.length) {
+        e.preventDefault(); e.returnValue = '';
+      }
     });
-    if (!txt) { alert('Нет данных'); return; }
-    const blob = new Blob([txt], {type:'text/plain'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'report.txt'; a.click();
-    URL.revokeObjectURL(url);
-  };
 
-  // Экспорт JSON
-  document.getElementById('exportJsonBtn').onclick = () => {
-    const data = JSON.stringify(records.map(r=>({
-      user: r.user,
-      number: r.number,
-      start: r.start.toISOString(),
-      end: r.end ? r.end.toISOString() : null
-    })), null, 2);
-    const blob = new Blob([data], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'records.json'; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Импорт JSON
-  document.getElementById('importJsonInput').addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const arr = JSON.parse(reader.result);
-        records = arr.map(r => ({
-          user: r.user,
-          number: r.number,
-          start: new Date(r.start),
-          end: r.end ? new Date(r.end) : null
-        }));
-        saveRecords();
-        renderUserTable();
-        renderAdminTable();
-        alert('Импорт завершён');
-      } catch {
-        alert('Неверный файл');
-      }
+    setNameBtn.onclick = () => {
+      const v = nameInput.value.trim(); if (!v) return;
+      userName = v; localStorage.setItem('reportName', v);
+      nameSection.style.display='none'; entrySection.style.display=''; renderList(); numberInput.focus();
     };
-    reader.readAsText(f);
-  });
+    nameInput.addEventListener('keydown', e => { if (e.key==='Enter') setNameBtn.click(); });
+    addBtn.onclick = addEntry; endBtn.onclick = endEntry; downloadBtn.onclick = downloadReport;
+    numberInput.addEventListener('keydown', e => { if (e.key==='Enter') addEntry(); });
+    saveEditBtn.onclick = saveEdit; cancelEditBtn.onclick = closeEditModal;
+    editModal.onclick = e => { if (e.target===editModal) closeEditModal(); };
+    window.addEventListener('keydown', e => { if (e.key==='Escape' && editModal.style.display==='flex') closeEditModal(); });
+    [editNumberInput, editStartInput, editEndInput].forEach(i => i.addEventListener('keydown', e => { if (e.key==='Enter') saveEdit(); }));
 
-  // Редактирование записи
-  function editRecord(r) {
-    const ns = prompt('Стал (ГГГГ-MM-DD HH:MM)', r.start.toISOString().slice(0,16).replace('T',' '));
-    if (ns) {
-      const d = new Date(ns.replace(' ','T'));
-      if (!isNaN(d)) r.start = d;
-      else alert('Неверный формат');
-    }
-    const ne = prompt('Слетел (ГГГГ-MM-DD HH:MM)', r.end? r.end.toISOString().slice(0,16).replace('T',' '): '');
-    if (ne) {
-      const d = new Date(ne.replace(' ','T'));
-      if (!isNaN(d)) r.end = d;
-      else alert('Неверный формат');
-    }
-    saveRecords();
-    renderUserTable();
-    renderAdminTable();
-  }
-</script>
-
+    // Init
+    if (userName) { nameSection.style.display='none'; entrySection.style.display=''; }
+    renderList(); if (userName) numberInput.focus(); else nameInput.focus();
+  </script>
 </body>
 </html>
